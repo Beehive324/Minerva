@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Users, FileQuestion, Plus, Copy } from "lucide-react"
@@ -9,13 +9,39 @@ import { QuizGeneratorModal } from "@/components/quiz-generator-modal"
 
 export default function TeacherDashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [classroomId, setClassroomId] = useState<number | null>(null)
+  const [classroom, setClassroom] = useState<any>(null)
+  const [quizzes, setQuizzes] = useState<any[]>([])
 
-  // MOCK DATA - Replace with API call: GET /api/classrooms/:id
+  useEffect(() => {
+    // Try to get classroomId from localStorage or URL (for demo, use localStorage)
+    const storedId = localStorage.getItem('classroomId')
+    if (storedId) {
+      setClassroomId(Number(storedId))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (classroomId) {
+      fetch(`http://localhost:8000/api/classrooms/${classroomId}`)
+        .then((res) => res.json())
+        .then((data) => setClassroom(data))
+    }
+  }, [classroomId])
+
+  useEffect(() => {
+    if (classroomId) {
+      fetch(`http://localhost:8000/api/classrooms/${classroomId}/assignments`)
+        .then((res) => res.json())
+        .then((data) => setQuizzes(data.assignments || []))
+    }
+  }, [classroomId])
+
   // Response: { classCode: string, studentCount: number, activeQuizCount: number, className: string }
-  const classCode = "JOIN-1234"
-  const studentCount = 2
-  const activeQuizCount = 0
-  const className = "Year 11 Maths"
+  const classCode = classroom?.classCode || "-"
+  const studentCount = classroom?.studentCount || 0
+  const activeQuizCount = classroom?.activeQuizCount || 0
+  const className = classroom?.className || "-"
 
   const copyClassCode = () => {
     navigator.clipboard.writeText(classCode)
@@ -76,21 +102,47 @@ export default function TeacherDashboardPage() {
 
         {/* Main Content */}
         <Card className="p-12">
-          <div className="flex flex-col items-center justify-center text-center space-y-6">
-            <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
-              <FileQuestion className="w-10 h-10 text-muted-foreground" />
+          {quizzes.length > 0 ? (
+            <div className="space-y-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-semibold">Quizzes for this Classroom</h2>
+                <Button size="lg" onClick={() => setIsModalOpen(true)}>
+                  <Plus className="w-5 h-5 mr-2" />
+                  Generate New Quiz
+                </Button>
+              </div>
+              <div className="grid md:grid-cols-2 gap-6">
+                {quizzes.map((quiz) => (
+                  <Card key={quiz.id} className="p-6 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileQuestion className="w-5 h-5 text-chart-1" />
+                      <span className="font-bold text-lg">{quiz.title}</span>
+                    </div>
+                    <div className="text-sm text-muted-foreground mb-1">Subject: {quiz.subject}</div>
+                    <div className="text-sm text-muted-foreground mb-1">Due: {quiz.dueDate}</div>
+                    <div className="text-sm text-muted-foreground mb-1">Difficulty: {quiz.difficulty}</div>
+                    <div className="text-sm text-muted-foreground mb-1">Questions: {quiz.questions}</div>
+                  </Card>
+                ))}
+              </div>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold">No quizzes active</h2>
-              <p className="text-muted-foreground max-w-md">
-                Generate your first AI-powered quiz to get started with personalized learning
-              </p>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-center space-y-6">
+              <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
+                <FileQuestion className="w-10 h-10 text-muted-foreground" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-semibold">No quizzes active</h2>
+                <p className="text-muted-foreground max-w-md">
+                  Generate your first AI-powered quiz to get started with personalized learning
+                </p>
+              </div>
+              <Button size="lg" onClick={() => setIsModalOpen(true)}>
+                <Plus className="w-5 h-5 mr-2" />
+                Generate New Quiz
+              </Button>
             </div>
-            <Button size="lg" onClick={() => setIsModalOpen(true)}>
-              <Plus className="w-5 h-5 mr-2" />
-              Generate New Quiz
-            </Button>
-          </div>
+          )}
         </Card>
       </div>
 

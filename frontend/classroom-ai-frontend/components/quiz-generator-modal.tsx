@@ -26,7 +26,8 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
   const [difficulty, setDifficulty] = useState("medium")
   const [strictAlign, setStrictAlign] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generatedQuestions, setGeneratedQuestions] = useState<any[]>([])
+  const [previewQuestions, setPreviewQuestions] = useState<any[]>([])
+  const [isPreviewing, setIsPreviewing] = useState(false)
 
   // MOCK DATA - Replace with API call: GET /api/classrooms/:id/topics
   const availableTopics = ["Algebra", "Geometry", "Statistics", "Trigonometry", "Calculus Basics"]
@@ -42,45 +43,62 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
     setSelectedTopics(selectedTopics.filter((t) => t !== topicToRemove))
   }
 
-  const handleGenerate = () => {
-    // TODO: API call - POST /api/quizzes/generate
-    // Body: { topics: selectedTopics, numQuestions: numQuestions[0], difficulty, strictAlign }
-    // Response: { questions: Array<Question> }
+  const handleGenerate = async () => {
     setIsGenerating(true)
-
-    // MOCK DATA - Simulated AI generation
-    setTimeout(() => {
-      setGeneratedQuestions([
-        {
-          id: 1,
-          type: "mcq",
-          question: "What is the value of x in the equation 2x + 5 = 13?",
-          options: ["x = 3", "x = 4", "x = 5", "x = 6"],
-          correctAnswer: "x = 4",
-        },
-        {
-          id: 2,
-          type: "numerical",
-          question: "Calculate the area of a circle with radius 7cm (use π = 3.14)",
-          answer: "153.86",
-        },
-        {
-          id: 3,
-          type: "written",
-          question: "Explain why the quadratic formula works for all quadratic equations",
-          rubric: "Should mention completing the square, discriminant, and derivation",
-        },
-      ])
-      setIsGenerating(false)
-    }, 3000)
+    setPreviewQuestions([])
+    setIsPreviewing(true)
+    try {
+      const res = await fetch("http://localhost:8000/api/generate-quiz-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pdf_filename: "mock.pdf", // Replace with actual filename if available
+          title: selectedTopics.join(", ") || "AI Generated Quiz",
+          subject: selectedTopics[0] || "Mathematics",
+          difficulty,
+        }),
+      })
+      const data = await res.json()
+      setPreviewQuestions(
+        (data.questions || []).map((q: any, idx: number) => ({
+          ...q,
+          id: idx + 1,
+          type: q.options ? "mcq" : "written",
+        }))
+      )
+    } catch (err) {
+      setPreviewQuestions([])
+    }
+    setIsGenerating(false)
   }
 
-  const handlePublish = () => {
-    // TODO: API call - POST /api/quizzes
-    // Body: { questions: generatedQuestions, topics: selectedTopics, difficulty, classroomId }
-    // Response: { quizId: string, success: boolean }
-    router.push("/teacher/analytics")
+  const handlePublish = async () => {
+    setIsGenerating(true)
+    // Store the previewed questions in the backend as the assignment
+    const classroomId = localStorage.getItem('classroomId')
+    if (!classroomId) return
+    await fetch(`http://localhost:8000/api/classrooms/${classroomId}/generate-quiz`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: selectedTopics.join(", ") || "AI Generated Quiz",
+        subject: selectedTopics[0] || "Mathematics",
+        difficulty,
+        due_date: 'Due Soon',
+        questions: previewQuestions.length,
+        previewQuestions // pass the previewed questions to backend
+      })
+    })
+    setIsGenerating(false)
+    setIsPreviewing(false)
+    setPreviewQuestions([])
     onClose()
+    router.push("/teacher/analytics")
+  }
+
+  const handleCancelPreview = () => {
+    setPreviewQuestions([])
+    setIsPreviewing(false)
   }
 
   return (
@@ -98,7 +116,7 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
 
         <div className="space-y-6 py-4">
           {/* Configuration */}
-          {!isGenerating && generatedQuestions.length === 0 && (
+          {!isGenerating && previewQuestions.length === 0 && (
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Select Topics</Label>
@@ -196,16 +214,14 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
           )}
 
           {/* Preview Questions */}
-          {!isGenerating && generatedQuestions.length > 0 && (
+          {!isGenerating && previewQuestions.length > 0 && isPreviewing && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label className="text-lg">Generated Questions Preview</Label>
-                <Badge variant="secondary">{generatedQuestions.length} Questions</Badge>
+                <Badge variant="secondary">{previewQuestions.length} Questions</Badge>
               </div>
-
-              {/* MOCK DATA - Preview of generated questions */}
               <div className="space-y-3">
-                {generatedQuestions.map((q, idx) => (
+                {previewQuestions.map((q, idx) => (
                   <Card key={q.id} className="p-4">
                     <div className="space-y-2">
                       <div className="flex items-start justify-between gap-4">
@@ -231,10 +247,14 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
                   </Card>
                 ))}
               </div>
-
-              <Button className="w-full" size="lg" onClick={handlePublish}>
-                Publish to Class
-              </Button>
+              <div className="flex gap-2">
+                <Button className="w-full" size="lg" onClick={handlePublish}>
+                  Publish to Class
+                </Button>
+                <Button className="w-full mt-2" size="lg" variant="outline" onClick={handleCancelPreview}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
         </div>

@@ -21,36 +21,58 @@ export default function TeacherSetupPage() {
   const [topics, setTopics] = useState<string[]>([])
   const [learningObjectives, setLearningObjectives] = useState<string[]>([])
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0]
       setFile(selectedFile)
-
-      // API call - POST /api/upload/curriculum (multipart/form-data)
-      // Body: { file: File }
-      // Response: { topics: string[], learningObjectives: string[] }
       setIsProcessing(true)
 
-      // MOCK DATA - Simulated AI processing of curriculum PDF
-      setTimeout(() => {
-        setTopics(["Algebra", "Geometry", "Statistics", "Trigonometry", "Calculus Basics"])
-        setLearningObjectives([
-          "Understand basic algebraic expressions",
-          "Learn geometric shapes and properties",
-          "Analyze statistical data",
-          "Master trigonometric functions",
-          "Introduction to calculus",
-        ])
-        setIsProcessing(false)
-      }, 2500)
+      // Send PDF to backend
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      try {
+        const res = await fetch('http://localhost:8000/api/upload/curriculum', {
+          method: 'POST',
+          body: formData,
+        })
+        if (!res.ok) throw new Error('Upload failed')
+        const data = await res.json()
+        setTopics(data.topics || [])
+        setLearningObjectives(data.learningObjectives || [])
+      } catch (err) {
+        // Handle error (show message, etc.)
+        setTopics([])
+        setLearningObjectives([])
+      }
+      setIsProcessing(false)
     }
   }
 
-  const handleCreateClassroom = () => {
+  const handleCreateClassroom = async () => {
     // API call - POST /api/classrooms
-    // Body: { name: classroomName, subject, topics, teacherId }
+    // Body: { name: classroomName, code: '', pdf_filename: file?.name, teacherId: '1' }
     // Response: { classroomId: string, classCode: string, success: boolean }
-    router.push("/teacher/dashboard")
+    try {
+      const res = await fetch('http://localhost:8000/api/classrooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: classroomName,
+          code: '', // You can generate or leave blank for backend to generate
+          pdf_filename: file ? file.name : '',
+          teacherId: '1', // Replace with actual teacher ID if available
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to create classroom')
+      const data = await res.json()
+      if (data.classroomId) {
+        localStorage.setItem('classroomId', data.classroomId)
+      }
+      router.push('/teacher/dashboard')
+    } catch (err) {
+      // Handle error (show message, etc.)
+      alert('Failed to create classroom')
+    }
   }
 
   return (
