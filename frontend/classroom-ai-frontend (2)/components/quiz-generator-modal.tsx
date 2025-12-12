@@ -6,81 +6,64 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { LoadingState } from "@/components/loading-state"
-import { Sparkles, CheckCircle2, X } from "lucide-react"
+import { Sparkles, CheckCircle2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { generateQuiz, publishQuiz } from "@/lib/api"
 
 interface QuizGeneratorModalProps {
   isOpen: boolean
   onClose: () => void
+  classroomId: string
 }
 
-export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps) {
+export function QuizGeneratorModal({ isOpen, onClose, classroomId }: QuizGeneratorModalProps) {
   const router = useRouter()
-  const [selectedTopics, setSelectedTopics] = useState<string[]>([])
-  const [currentTopic, setCurrentTopic] = useState("")
+  const [customPrompt, setCustomPrompt] = useState("")
   const [numQuestions, setNumQuestions] = useState([3])
   const [difficulty, setDifficulty] = useState("medium")
+  const [timeLimit, setTimeLimit] = useState<number | undefined>(undefined)
+  const [enableTimeLimit, setEnableTimeLimit] = useState(false)
   const [strictAlign, setStrictAlign] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedQuestions, setGeneratedQuestions] = useState<any[]>([])
 
-  // MOCK DATA - Replace with API call: GET /api/classrooms/:id/topics
-  const availableTopics = ["Algebra", "Geometry", "Statistics", "Trigonometry", "Calculus Basics"]
-
-  const handleAddTopic = () => {
-    if (currentTopic && !selectedTopics.includes(currentTopic)) {
-      setSelectedTopics([...selectedTopics, currentTopic])
-      setCurrentTopic("")
+  const handleGenerate = async () => {
+    setIsGenerating(true)
+    try {
+      const { questions } = await generateQuiz({
+        classroomId,
+        customPrompt,
+        numQuestions: numQuestions[0],
+        difficulty,
+        timeLimit: enableTimeLimit ? timeLimit : undefined,
+        strictAlign,
+      })
+      setGeneratedQuestions(questions)
+    } catch (error) {
+      console.error("Failed to generate quiz:", error)
+    } finally {
+      setIsGenerating(false)
     }
   }
 
-  const handleRemoveTopic = (topicToRemove: string) => {
-    setSelectedTopics(selectedTopics.filter((t) => t !== topicToRemove))
-  }
-
-  const handleGenerate = () => {
-    // TODO: API call - POST /api/quizzes/generate
-    // Body: { topics: selectedTopics, numQuestions: numQuestions[0], difficulty, strictAlign }
-    // Response: { questions: Array<Question> }
-    setIsGenerating(true)
-
-    // MOCK DATA - Simulated AI generation
-    setTimeout(() => {
-      setGeneratedQuestions([
-        {
-          id: 1,
-          type: "mcq",
-          question: "What is the value of x in the equation 2x + 5 = 13?",
-          options: ["x = 3", "x = 4", "x = 5", "x = 6"],
-          correctAnswer: "x = 4",
-        },
-        {
-          id: 2,
-          type: "numerical",
-          question: "Calculate the area of a circle with radius 7cm (use π = 3.14)",
-          answer: "153.86",
-        },
-        {
-          id: 3,
-          type: "written",
-          question: "Explain why the quadratic formula works for all quadratic equations",
-          rubric: "Should mention completing the square, discriminant, and derivation",
-        },
-      ])
-      setIsGenerating(false)
-    }, 3000)
-  }
-
-  const handlePublish = () => {
-    // TODO: API call - POST /api/quizzes
-    // Body: { questions: generatedQuestions, topics: selectedTopics, difficulty, classroomId }
-    // Response: { quizId: string, success: boolean }
-    router.push("/teacher/analytics")
-    onClose()
+  const handlePublish = async () => {
+    try {
+      await publishQuiz({
+        classroomId,
+        questions: generatedQuestions,
+        difficulty,
+        timeLimit: enableTimeLimit ? timeLimit : undefined,
+      })
+      router.push("/teacher/analytics")
+      onClose()
+    } catch (error) {
+      console.error("Failed to publish quiz:", error)
+    }
   }
 
   return (
@@ -97,47 +80,21 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Configuration */}
           {!isGenerating && generatedQuestions.length === 0 && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Select Topics</Label>
-                <div className="flex gap-2">
-                  <Select value={currentTopic} onValueChange={setCurrentTopic}>
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Choose topics" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableTopics.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={handleAddTopic} disabled={!currentTopic}>
-                    Add
-                  </Button>
-                </div>
-
-                {/* Selected Topics Display */}
-                {selectedTopics.length > 0 && (
-                  <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-muted">
-                    {selectedTopics.map((topic) => (
-                      <Badge key={topic} variant="secondary" className="pl-3 pr-1 py-1">
-                        {topic}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-4 w-4 ml-2 hover:bg-transparent"
-                          onClick={() => handleRemoveTopic(topic)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+                <Label htmlFor="custom-prompt">Customization Prompt</Label>
+                <Textarea
+                  id="custom-prompt"
+                  placeholder="e.g., Create questions on quadratic equations and trigonometry focusing on exam-style questions..."
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  rows={4}
+                  className="resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Describe the topics, difficulty level, or specific requirements for your quiz
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -153,7 +110,6 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
                   step={1}
                   className="py-4"
                 />
-                <p className="text-xs text-muted-foreground">Demo locked to 3 questions for hackathon</p>
               </div>
 
               <div className="space-y-2">
@@ -172,6 +128,31 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
                 </div>
               </div>
 
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-4 rounded-lg border">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Enable Time Limit</Label>
+                    <p className="text-sm text-muted-foreground">Set a time limit for completing the quiz</p>
+                  </div>
+                  <Switch checked={enableTimeLimit} onCheckedChange={setEnableTimeLimit} />
+                </div>
+
+                {enableTimeLimit && (
+                  <div className="space-y-2 pl-4">
+                    <Label htmlFor="time-limit">Time Limit (minutes)</Label>
+                    <Input
+                      id="time-limit"
+                      type="number"
+                      min={5}
+                      max={180}
+                      value={timeLimit || 30}
+                      onChange={(e) => setTimeLimit(Number.parseInt(e.target.value))}
+                      placeholder="30"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between p-4 rounded-lg border">
                 <div className="space-y-0.5">
                   <Label className="text-base">Strictly align to specification</Label>
@@ -180,14 +161,13 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
                 <Switch checked={strictAlign} onCheckedChange={setStrictAlign} />
               </div>
 
-              <Button className="w-full" size="lg" onClick={handleGenerate} disabled={selectedTopics.length === 0}>
+              <Button className="w-full" size="lg" onClick={handleGenerate} disabled={!customPrompt.trim()}>
                 <Sparkles className="w-5 h-5 mr-2" />
                 Generate with AI
               </Button>
             </div>
           )}
 
-          {/* Generating State */}
           {isGenerating && (
             <LoadingState
               message="Consulting Syllabus..."
@@ -195,7 +175,6 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
             />
           )}
 
-          {/* Preview Questions */}
           {!isGenerating && generatedQuestions.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -203,7 +182,6 @@ export function QuizGeneratorModal({ isOpen, onClose }: QuizGeneratorModalProps)
                 <Badge variant="secondary">{generatedQuestions.length} Questions</Badge>
               </div>
 
-              {/* MOCK DATA - Preview of generated questions */}
               <div className="space-y-3">
                 {generatedQuestions.map((q, idx) => (
                   <Card key={q.id} className="p-4">

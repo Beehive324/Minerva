@@ -18,7 +18,7 @@ export default function LandingPage() {
         {/* Role Selection Cards */}
         <div className="grid md:grid-cols-2 gap-6">
           {/* Teacher Card */}
-          <Link href="/teacher/setup" className="block group">
+          <Link href="/teacher/classrooms" className="block group">
             <Card className="p-8 hover:border-primary transition-colors cursor-pointer h-full">
               <div className="space-y-6">
                 <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -40,7 +40,7 @@ export default function LandingPage() {
           </Link>
 
           {/* Student Card */}
-          <Link href="/student/dashboard" className="block group">
+          <Link href="/student/join" className="block group">
             <Card className="p-8 hover:border-primary transition-colors cursor-pointer h-full">
               <div className="space-y-6">
                 <div className="w-16 h-16 rounded-xl bg-chart-2/20 flex items-center justify-center">

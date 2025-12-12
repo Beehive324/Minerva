@@ -1,36 +1,52 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, TrendingDown, Lightbulb } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { getQuizAnalytics } from "@/lib/api"
+
+interface StudentResult {
+  id: number
+  name: string
+  status: string
+  score: string
+  percentage: number
+  insight: string
+}
 
 export default function AnalyticsPage() {
-  // MOCK DATA - Replace with API call: GET /api/quizzes/:id/analytics
-  // Response: { summary: string, insights: Array<Insight>, students: Array<StudentResult> }
-  const students = [
-    {
-      id: 1,
-      name: "Student A",
-      status: "Submitted",
-      score: "1/3",
-      percentage: 33,
-      insight: "Struggled with Quadratics",
-    },
-    {
-      id: 2,
-      name: "Student B",
-      status: "Submitted",
-      score: "2/3",
-      percentage: 67,
-      insight: "Strong on basics, needs advanced practice",
-    },
-  ]
+  const [students, setStudents] = useState<StudentResult[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const aiSummary =
-    "Class average is low on Algebra. Suggested remediation: Review Section 2.1 - Quadratic Equations and provide additional practice on factorization methods. Consider one-on-one support for Student A."
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const data = await getQuizAnalytics("quiz-id")
+        setStudents(data.students)
+      } catch (error) {
+        console.error("Failed to fetch analytics:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAnalytics()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-2">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">Loading analytics...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -50,34 +66,10 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* AI Summary Card */}
-        <Card className="p-6 bg-gradient-to-br from-chart-1/10 to-chart-1/5 border-chart-1/20">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-full bg-chart-1/20 flex items-center justify-center flex-shrink-0">
-              <Lightbulb className="w-5 h-5 text-chart-1" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="font-semibold text-lg">AI Class Summary</h3>
-              {/* MOCK DATA - AI generated class insights */}
-              <p className="text-foreground/90 leading-relaxed">{aiSummary}</p>
-              <div className="flex items-center gap-2 pt-2">
-                <Badge variant="secondary" className="bg-background/50">
-                  <TrendingDown className="w-3 h-3 mr-1" />
-                  Below Target: 50%
-                </Badge>
-                <Badge variant="secondary" className="bg-background/50">
-                  Focus Area: Quadratics
-                </Badge>
-              </div>
-            </div>
-          </div>
-        </Card>
-
         {/* Student Results Table */}
         <Card>
           <div className="p-6">
             <h2 className="text-xl font-semibold mb-4">Student Performance</h2>
-            {/* MOCK DATA - Student performance data */}
             <Table>
               <TableHeader>
                 <TableRow>

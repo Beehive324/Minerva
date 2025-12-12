@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { ArrowLeft, CheckCircle2, XCircle, Send, BookOpen, Sparkles } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { initTutorSession, sendTutorMessage, getSubmissionResults } from "@/lib/api"
 
 interface Message {
   role: "ai" | "student"
@@ -29,80 +30,81 @@ export default function ResultsPage() {
   const [selectedQuestion, setSelectedQuestion] = useState<number | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
+  const [sessionId, setSessionId] = useState<string | null>(null)
 
-  // MOCK DATA - Replace with API call: GET /api/quiz-submissions/:id
-  // Response: { score: number, total: number, questions: Array<QuestionResult> }
-  const questions: QuestionResult[] = [
-    {
-      id: 1,
-      question: "What is the value of x in the equation 2x + 5 = 13?",
-      studentAnswer: "x = 5",
-      correctAnswer: "x = 4",
-      isCorrect: false,
-      explanation: "To solve 2x + 5 = 13, subtract 5 from both sides to get 2x = 8, then divide by 2 to get x = 4.",
-    },
-    {
-      id: 2,
-      question: "Calculate the area of a circle with radius 7cm (use π = 3.14)",
-      studentAnswer: "153.86",
-      correctAnswer: "153.86",
-      isCorrect: true,
-      explanation: "Using the formula A = πr², we get A = 3.14 × 7² = 3.14 × 49 = 153.86 cm².",
-    },
-    {
-      id: 3,
-      question: "Explain why the quadratic formula works for all quadratic equations",
-      studentAnswer: "It works because it comes from completing the square.",
-      correctAnswer: null,
-      isCorrect: false,
-      explanation:
-        "While your answer touches on the origin, a complete explanation should include the derivation process and mention the discriminant.",
-    },
-  ]
+  const [questions, setQuestions] = useState<QuestionResult[]>([])
+  const [score, setScore] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [percentage, setPercentage] = useState(0)
+  const [loading, setLoading] = useState(true)
 
-  const score = questions.filter((q) => q.isCorrect).length
-  const total = questions.length
-  const percentage = Math.round((score / total) * 100)
+  useEffect(() => {
+    const fetchResults = async () => {
+      try {
+        const data = await getSubmissionResults("submission-id")
+        setQuestions(data.questions)
+        setScore(data.score)
+        setTotal(data.total)
+        setPercentage(data.percentage)
+      } catch (error) {
+        console.error("Failed to fetch results:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
 
-  const handleGetHelp = (questionId: number) => {
-    // TODO: API call - POST /api/tutor/init
-    // Body: { questionId: number, studentAnswer: string }
-    // Response: { initialMessage: string, context: string }
+    fetchResults()
+  }, [])
+
+  const handleGetHelp = async (questionId: number) => {
     setSelectedQuestion(questionId)
     const question = questions.find((q) => q.id === questionId)
     if (question && messages.length === 0) {
-      // MOCK DATA - Initial AI tutor response
-      setMessages([
-        {
-          role: "ai",
-          content: `I see you answered '${question.studentAnswer}'. Let's look at the formula from the syllabus. What is the first step when solving for x?`,
-          source: "Specification Page 14",
-        },
-      ])
+      try {
+        const {
+          sessionId: newSessionId,
+          initialMessage,
+          source,
+        } = await initTutorSession({
+          questionId,
+          studentAnswer: question.studentAnswer,
+          quizId: "quiz-id",
+        })
+        setSessionId(newSessionId)
+        setMessages([{ role: "ai", content: initialMessage, source }])
+      } catch (error) {
+        console.error("Failed to init tutor session:", error)
+      }
     }
   }
 
-  const handleSendMessage = () => {
-    if (!input.trim()) return
+  const handleSendMessage = async () => {
+    if (!input.trim() || !sessionId) return
 
-    // TODO: API call - POST /api/tutor/chat
-    // Body: { questionId: number, message: string, conversationHistory: Array<Message> }
-    // Response: { response: string, source: string }
-
-    // MOCK DATA - Simulated AI tutor conversation
-    const newMessages: Message[] = [
-      ...messages,
-      { role: "student", content: input },
-      {
-        role: "ai",
-        content:
-          "Great question! When we have 2x + 5 = 13, we need to isolate x. First, we subtract 5 from both sides. Can you tell me what that gives us?",
-        source: "Specification Page 14",
-      },
-    ]
-
-    setMessages(newMessages)
+    const studentMessage: Message = { role: "student", content: input }
+    setMessages((prev) => [...prev, studentMessage])
     setInput("")
+
+    try {
+      const { response, source } = await sendTutorMessage({
+        sessionId,
+        message: input,
+      })
+      setMessages((prev) => [...prev, { role: "ai", content: response, source }])
+    } catch (error) {
+      console.error("Failed to send message:", error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-2">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">Loading results...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -144,7 +146,6 @@ export default function ResultsPage() {
 
             {/* Questions List */}
             <div className="space-y-4">
-              {/* MOCK DATA - Student's quiz results */}
               {questions.map((q) => (
                 <Card
                   key={q.id}
@@ -230,7 +231,6 @@ export default function ResultsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* MOCK DATA - AI tutor conversation messages */}
                 {messages.map((message, idx) => (
                   <div key={idx} className={cn("flex", message.role === "student" ? "justify-end" : "justify-start")}>
                     <div

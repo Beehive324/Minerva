@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -12,34 +12,29 @@ import { ArrowLeft, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { LoadingState } from "@/components/loading-state"
+import { getQuiz, submitQuiz } from "@/lib/api"
 
 export default function QuizPage() {
   const router = useRouter()
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [questions, setQuestions] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // MOCK DATA - Replace with API call: GET /api/quizzes/:id
-  // Response: { quizId: string, title: string, questions: Array<Question> }
-  const questions = [
-    {
-      id: 1,
-      type: "mcq",
-      question: "What is the value of x in the equation 2x + 5 = 13?",
-      options: ["x = 3", "x = 4", "x = 5", "x = 6"],
-    },
-    {
-      id: 2,
-      type: "numerical",
-      question: "Calculate the area of a circle with radius 7cm (use π = 3.14)",
-      unit: "cm²",
-    },
-    {
-      id: 3,
-      type: "written",
-      question: "Explain why the quadratic formula works for all quadratic equations",
-    },
-  ]
+  useEffect(() => {
+    async function fetchQuiz() {
+      try {
+        const { quiz } = await getQuiz("quiz-id")
+        setQuestions(quiz.questions)
+      } catch (error) {
+        console.error("Failed to fetch quiz:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchQuiz()
+  }, [])
 
   const handleAnswerChange = (value: string) => {
     setAnswers({ ...answers, [currentQuestion]: value })
@@ -57,18 +52,32 @@ export default function QuizPage() {
     }
   }
 
-  const handleSubmit = () => {
-    // TODO: API call - POST /api/quiz-submissions
-    // Body: { quizId: string, answers: Record<number, string>, studentId: string }
-    // Response: { submissionId: string, score: number, results: Array<Result> }
+  const handleSubmit = async () => {
     setIsSubmitting(true)
-    setTimeout(() => {
+    try {
+      await submitQuiz({
+        quizId: "quiz-id",
+        answers,
+      })
       router.push("/student/results")
-    }, 2500)
+    } catch (error) {
+      console.error("Failed to submit quiz:", error)
+      setIsSubmitting(false)
+    }
   }
 
   const progress = ((currentQuestion + 1) / questions.length) * 100
   const currentQ = questions[currentQuestion]
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="p-12 max-w-lg w-full">
+          <LoadingState message="Loading Quiz..." submessage="Please wait while we fetch the quiz" />
+        </Card>
+      </div>
+    )
+  }
 
   if (isSubmitting) {
     return (

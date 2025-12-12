@@ -11,46 +11,51 @@ import { LoadingState } from "@/components/loading-state"
 import { Upload, CheckCircle2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { analyzeCurriculum, createClassroom } from "@/lib/api"
 
 export default function TeacherSetupPage() {
   const router = useRouter()
   const [classroomName, setClassroomName] = useState("")
   const [subject, setSubject] = useState("")
+  const [classCode, setClassCode] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [topics, setTopics] = useState<string[]>([])
   const [learningObjectives, setLearningObjectives] = useState<string[]>([])
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0]
       setFile(selectedFile)
-
-      // API call - POST /api/upload/curriculum (multipart/form-data)
-      // Body: { file: File }
-      // Response: { topics: string[], learningObjectives: string[] }
       setIsProcessing(true)
 
-      // MOCK DATA - Simulated AI processing of curriculum PDF
-      setTimeout(() => {
-        setTopics(["Algebra", "Geometry", "Statistics", "Trigonometry", "Calculus Basics"])
-        setLearningObjectives([
-          "Understand basic algebraic expressions",
-          "Learn geometric shapes and properties",
-          "Analyze statistical data",
-          "Master trigonometric functions",
-          "Introduction to calculus",
-        ])
+      try {
+        const { topics: extractedTopics, learningObjectives: objectives } = await analyzeCurriculum(selectedFile)
+        setTopics(extractedTopics)
+        setLearningObjectives(objectives)
+      } catch (error) {
+        console.error("Failed to analyze curriculum:", error)
+      } finally {
         setIsProcessing(false)
-      }, 2500)
+      }
     }
   }
 
-  const handleCreateClassroom = () => {
-    // API call - POST /api/classrooms
-    // Body: { name: classroomName, subject, topics, teacherId }
-    // Response: { classroomId: string, classCode: string, success: boolean }
-    router.push("/teacher/dashboard")
+  const handleCreateClassroom = async () => {
+    if (!file) return
+
+    try {
+      await createClassroom({
+        name: classroomName,
+        subject,
+        classCode,
+        curriculum: file,
+        topics,
+      })
+      router.push("/teacher/classrooms")
+    } catch (error) {
+      console.error("Failed to create classroom:", error)
+    }
   }
 
   return (
@@ -58,7 +63,7 @@ export default function TeacherSetupPage() {
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Link href="/">
+          <Link href="/teacher/classrooms">
             <Button variant="ghost" size="icon">
               <ArrowLeft className="w-5 h-5" />
             </Button>
@@ -91,6 +96,18 @@ export default function TeacherSetupPage() {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="class-code">Class Code</Label>
+              <Input
+                id="class-code"
+                placeholder="e.g., MATH2025"
+                value={classCode}
+                onChange={(e) => setClassCode(e.target.value)}
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">Students will use this code to join your classroom</p>
             </div>
           </div>
 
@@ -157,7 +174,7 @@ export default function TeacherSetupPage() {
           <Button
             className="w-full"
             size="lg"
-            disabled={!classroomName || !subject || topics.length === 0}
+            disabled={!classroomName || !subject || !classCode || topics.length === 0}
             onClick={handleCreateClassroom}
           >
             Approve & Create Classroom
