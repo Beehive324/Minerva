@@ -14,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize SQLite database and create 'classroom' table if it doesn't exist
+# sInitialize SQLite database and create 'classroom' table if it doesn't exist
 DB_PATH = Path(__file__).parent / 'database.db'
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
