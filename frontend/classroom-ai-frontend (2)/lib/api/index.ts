@@ -77,12 +77,23 @@ export async function createClassroom(data: {
   curriculum: File
   topics: string[]
 }) {
-  // TODO: POST /api/classrooms
-  // Request: multipart/form-data with { name, subject, classCode, curriculum (file), topics }
-  // Response: { classroomId: string }
+  // POST /api/classrooms
+  const formData = new FormData();
+  formData.append("name", data.name);
+  formData.append("subject", data.subject);
+  formData.append("code", data.classCode);
+  formData.append("pdf_filename", data.curriculum?.name || "");
+  // Optionally, you could send topics as JSON string if backend expects it
+  // formData.append("topics", JSON.stringify(data.topics));
+  // Add teacher_id if available (hardcoded or from auth)
+  formData.append("teacher_id", "1");
 
-  await new Promise((resolve) => setTimeout(resolve, 2500))
-  return { classroomId: `classroom-${Date.now()}` }
+  const res = await fetch("http://localhost:8000/api/classrooms", {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) throw new Error("Failed to create classroom");
+  return await res.json();
 }
 
 export async function joinClassroom(classCode: string) {
@@ -111,15 +122,19 @@ export async function getStudentClassrooms() {
 }
 
 export async function analyzeCurriculum(file: File) {
-  // TODO: POST /api/curriculum/analyze
-  // Request: multipart/form-data with { file }
-  // Response: { topics: string[], learningObjectives: string[] }
-
-  await new Promise((resolve) => setTimeout(resolve, 2500))
+  // POST /api/upload/curriculum
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("http://localhost:8000/api/upload/curriculum", {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) throw new Error("Failed to analyze curriculum");
+  const data = await res.json();
   return {
-    topics: ["Algebra", "Geometry", "Statistics"],
-    learningObjectives: ["Understand algebraic expressions", "Learn geometric properties"],
-  }
+    topics: data.topics || [],
+    learningObjectives: data.learningObjectives || [],
+  };
 }
 
 // ============= QUIZ API =============
