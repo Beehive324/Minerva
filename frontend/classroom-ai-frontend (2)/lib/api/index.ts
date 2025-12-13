@@ -121,22 +121,6 @@ export async function getStudentClassrooms() {
   }
 }
 
-export async function analyzeCurriculum(file: File) {
-  // POST /api/upload/curriculum
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch("http://localhost:8000/api/upload/curriculum", {
-    method: "POST",
-    body: formData,
-  });
-  if (!res.ok) throw new Error("Failed to analyze curriculum");
-  const data = await res.json();
-  return {
-    topics: data.topics || [],
-    learningObjectives: data.learningObjectives || [],
-  };
-}
-
 // ============= QUIZ API =============
 
 export async function generateQuiz(data: {
