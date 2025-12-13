@@ -63,11 +63,10 @@ export async function createUser(data: { type: "student" | "teacher"; email?: st
 // ============= CLASSROOM API =============
 
 export async function getTeacherClassrooms() {
-  // TODO: GET /api/teacher/classrooms
-  // Response: { classrooms: Array<Classroom> }
-
-  await new Promise((resolve) => setTimeout(resolve, 500))
-  return { classrooms: MOCK_CLASSROOMS }
+  // GET /api/teacher/1/classrooms (hardcoded teacher_id=1)
+  const res = await fetch("http://localhost:8000/api/teacher/1/classrooms");
+  if (!res.ok) throw new Error("Failed to fetch classrooms");
+  return await res.json();
 }
 
 export async function createClassroom(data: {

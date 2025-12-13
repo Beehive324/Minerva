@@ -93,3 +93,23 @@ async def create_classroom(
     conn.commit()
     conn.close()
     return {"success": True, "classroomId": classroom_id, "classCode": code}
+
+# Endpoint to get all classrooms for teacher_id=1
+@app.get("/api/teacher/1/classrooms")
+def get_teacher_classrooms():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, subject, code, pdf_filename, teacher_id FROM classroom WHERE teacher_id = ?", ("1",))
+    classrooms = [
+        {
+            "id": row[0],
+            "name": row[1],
+            "subject": row[2],
+            "code": row[3],
+            "pdf_filename": row[4],
+            "teacher_id": row[5],
+        }
+        for row in cursor.fetchall()
+    ]
+    conn.close()
+    return {"classrooms": classrooms}
