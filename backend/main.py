@@ -7,6 +7,19 @@ import random
 from fastapi import Query
 from datetime import datetime
 
+try:
+    # When running as a package: `uvicorn Minerva.backend.main:app` or similar
+    from .agents.quiz import QuizAgent  # type: ignore
+    from .agents.curriculum import CurriculumAgent  # type: ignore
+except ImportError:
+    # When running from the backend directory: `uvicorn main:app`
+    try:
+        from agents.quiz import QuizAgent  # type: ignore
+        from agents.curriculum import CurriculumAgent  # type: ignore
+    except ImportError:
+        QuizAgent = None  # type: ignore
+        CurriculumAgent = None  # type: ignore
+
 app = FastAPI()
 
 app.add_middleware(
@@ -93,6 +106,9 @@ cursor.execute('''
 conn.commit()
 conn.close()
 
+quiz_agent = QuizAgent() if QuizAgent is not None else None
+curriculum_agent = CurriculumAgent() if "CurriculumAgent" in globals() and CurriculumAgent is not None else None
+
 @app.post("/trigger")
 def trigger():
     return JSONResponse(content={"message": "Backend function triggered!"})
@@ -100,18 +116,25 @@ def trigger():
 @app.post("/api/upload/curriculum")
 async def upload_curriculum(file: UploadFile = File(...)):
     print(f"Received file: {file.filename}")
-    # Process the PDF file here (e.g., extract topics/objectives)
-    # For now, return mock data:
-    return JSONResponse(content={
-        "topics": ["Algebraaa", "Geometry", "Statistics", "Trigonometry", "Calculus Basics"],
-        "learningObjectives": [
-            "Understand basic algebraic expressions",
-            "Learn geometric shapes and properties",
-            "Analyze statistical data",
-            "Master trigonometric functions",
-            "Introduction to calculus"
-        ]
-    })
+    pdf_bytes = await file.read()
+
+    if curriculum_agent is not None:
+        result = curriculum_agent.extract_curriculum(pdf_bytes=pdf_bytes, filename=file.filename)
+        return JSONResponse(content=result)
+
+    # Fallback to previous mock behaviour if curriculum_agent isn't available
+    return JSONResponse(
+        content={
+            "topics": ["Algebraaa", "Geometry", "Statistics", "Trigonometry", "Calculus Basics"],
+            "learningObjectives": [
+                "Understand basic algebraic expressions",
+                "Learn geometric shapes and properties",
+                "Analyze statistical data",
+                "Master trigonometric functions",
+                "Introduction to calculus",
+            ],
+        }
+    )
 
 def generate_class_code():
     return f"JOIN-{random.randint(10000, 99999)}"
@@ -214,39 +237,49 @@ async def generate_ai_quiz(classroom_id: int, data: dict = Body(...)):
     due_date = data.get("due_date", "Due Soon")
     preview_questions = data.get("previewQuestions")
     num_questions = len(preview_questions) if preview_questions else data.get("questions", 5)
+
+    # Use QuizAgent to generate or normalize questions
+    if quiz_agent is not None:
+        questions = quiz_agent.generate_questions(
+            title=title,
+            subject=subject,
+            difficulty=difficulty,
+            num_questions=num_questions,
+            preview_questions=preview_questions,
+        )
+    else:
+        # Fallback to the previous mock behaviour
+        if preview_questions:
+            questions = preview_questions
+        else:
+            questions = [
+                {
+                    "question": f"Sample question {i+1} for {title}",
+                    "answer": f"Sample answer {i+1}",
+                    "options": [f"Option {chr(65+j)}" for j in range(4)],
+                }
+                for i in range(num_questions)
+            ]
+
     # Insert assignment
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO assignments (classroom_id, title, subject, difficulty, due_date, questions) VALUES (?, ?, ?, ?, ?, ?)",
-        (classroom_id, title, subject, difficulty, due_date, num_questions)
+        (classroom_id, title, subject, difficulty, due_date, len(questions))
     )
     assignment_id = cursor.lastrowid
-    # Store previewed questions if provided
-    if preview_questions:
-        for q in preview_questions:
-            options = q.get("options")
-            if isinstance(options, list):
-                options = ",".join(options)
-            cursor.execute(
-                "INSERT INTO questions (assignment_id, question, answer, options) VALUES (?, ?, ?, ?)",
-                (assignment_id, q.get("question"), q.get("answer", ""), options)
-            )
-    else:
-        # Generate mock questions if not provided
-        questions = [
-            {
-                "question": f"Sample question {i+1} for {title}",
-                "answer": f"Sample answer {i+1}",
-                "options": ",".join([f"Option {chr(65+j)}" for j in range(4)])
-            }
-            for i in range(num_questions)
-        ]
-        for q in questions:
-            cursor.execute(
-                "INSERT INTO questions (assignment_id, question, answer, options) VALUES (?, ?, ?, ?)",
-                (assignment_id, q["question"], q["answer"], q["options"])
-            )
+    # Store questions
+    for q in questions:
+        options = q.get("options") or []
+        if isinstance(options, list):
+            options_str = ",".join(options)
+        else:
+            options_str = str(options)
+        cursor.execute(
+            "INSERT INTO questions (assignment_id, question, answer, options) VALUES (?, ?, ?, ?)",
+            (assignment_id, q.get("question", ""), q.get("answer", ""), options_str)
+        )
     conn.commit()
     conn.close()
     return {"success": True}
@@ -257,24 +290,37 @@ async def generate_quiz_questions(data: dict = Body(...)):
     title = data.get("title", "AI Generated Quiz")
     subject = data.get("subject", "Mathematics")
     difficulty = data.get("difficulty", "Medium")
-    # For now, return mock questions
-    questions = [
-        {
-            "question": f"What is the main concept in {subject} covered in {title}?",
-            "options": ["Option A", "Option B", "Option C", "Option D"],
-            "answer": "Option A"
-        },
-        {
-            "question": f"Solve for x: 2x + 3 = 7.",
-            "options": ["x=1", "x=2", "x=3", "x=4"],
-            "answer": "x=2"
-        },
-        {
-            "question": f"Which of the following best describes {difficulty} level content?",
-            "options": ["Easy", "Medium", "Hard", "Expert"],
-            "answer": difficulty
-        }
-    ]
+    num_questions = data.get("questions", 3)
+
+    # Currently pdf_filename is not used; it can be
+    # wired into the QuizAgent once curriculum parsing is added.
+    if quiz_agent is not None:
+        questions = quiz_agent.generate_questions(
+            title=title,
+            subject=subject,
+            difficulty=difficulty,
+            num_questions=num_questions,
+            preview_questions=None,
+        )
+    else:
+        # Fallback to previous mock behaviour
+        questions = [
+            {
+                "question": f"What is the main concept in {subject} covered in {title}?",
+                "options": ["Option A", "Option B", "Option C", "Option D"],
+                "answer": "Option A"
+            },
+            {
+                "question": "Solve for x: 2x + 3 = 7.",
+                "options": ["x=1", "x=2", "x=3", "x=4"],
+                "answer": "x=2"
+            },
+            {
+                "question": f"Which of the following best describes {difficulty} level content?",
+                "options": ["Easy", "Medium", "Hard", "Expert"],
+                "answer": difficulty
+            }
+        ]
     return {"questions": questions}
 
 @app.get("/api/assignments/{assignment_id}/questions")
@@ -386,5 +432,3 @@ def get_student_submissions(student_id: int):
     ]
     conn.close()
     return {"submissions": submissions}
-
-
