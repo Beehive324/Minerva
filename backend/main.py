@@ -113,3 +113,27 @@ def get_teacher_classrooms():
     ]
     conn.close()
     return {"classrooms": classrooms}
+
+# Endpoint to join a classroom by code
+from fastapi import Body
+@app.post("/api/classrooms/join")
+async def join_classroom(data: dict = Body(...)):
+    code = data.get("classCode")
+    if not code:
+        return {"success": False, "error": "Missing classCode"}
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, subject, code, pdf_filename, teacher_id FROM classroom WHERE code = ?", (code,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        classroom = {
+            "id": row[0],
+            "name": row[1],
+            "subject": row[2],
+            "code": row[3],
+            "pdf_filename": row[4],
+            "teacher_id": row[5],
+        }
+        return {"success": True, "classroom": classroom}
+    return {"success": False, "error": "Classroom not found"}

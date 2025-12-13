@@ -96,13 +96,14 @@ export async function createClassroom(data: {
 }
 
 export async function joinClassroom(classCode: string) {
-  // TODO: POST /api/classrooms/join
-  // Request: { classCode: string }
-  // Response: { classroom: Classroom }
-
-  await new Promise((resolve) => setTimeout(resolve, 1500))
-  const classroom = MOCK_CLASSROOMS[0]
-  return { classroom }
+  // POST /api/classrooms/join
+  const res = await fetch("http://localhost:8000/api/classrooms/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ classCode }),
+  });
+  if (!res.ok) throw new Error("Failed to join classroom");
+  return await res.json();
 }
 
 export async function getStudentClassrooms() {
